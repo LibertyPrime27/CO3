@@ -581,5 +581,14 @@
   "component_rule_edit_case_sensitive": "Match case",
   "component_rule_edit_regex": "Use regular expression",
   "component_rule_edit_case_sensitive_label": "Match Case",
-  "component_rule_edit_regex_label": "Regex"
+  "component_rule_edit_regex_label": "Regex",
+
+  "screen_js_error_h1": "Hold UP!",
+  "screen_js_error_h2": "CO3 crashed ! But don't worry ! We might be able to recover.",
+  "screen_js_error_unknown": "Unknown Error",
+  "screen_js_error_github": "GitHub",
+  "screen_js_error_discord": "Discord",
+  "screen_js_error_copy": "Copy Error",
+  "screen_js_error_close": "Close the app",
+  "screen_js_error_recover": "Try recovering"
 }
