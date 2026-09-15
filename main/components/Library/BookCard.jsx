@@ -79,9 +79,9 @@ const BookCard = ({ book, viewMode, theme, onUpdate, setScreens, libraryDAO, wor
       }
     }
 
-    if (jsonSettings.showStatusBadge) getBadgeColor();
+    if (jsonSettings?.showStatusBadge) getBadgeColor();
 
-  }, [book.id, chapterDAO, jsonSettings.showStatusBadge, progressDAO, theme.statusBadge.clicked, theme.statusBadge.finished, theme.statusBadge.started, workDAO]);
+  }, [book.id, chapterDAO, jsonSettings, progressDAO, theme.statusBadge.clicked, theme.statusBadge.finished, theme.statusBadge.started, workDAO]);
 
   const isSmall = viewMode === 'small';
   const isMed = viewMode === 'med';
