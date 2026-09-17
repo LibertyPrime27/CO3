@@ -10,6 +10,12 @@ import notifee, {
   AndroidStyle,
   EventType,
 } from 'react-native-notify-kit';
+import {
+  safeCancelNotification,
+  safeCreateChannel,
+  safeDisplayNotification,
+  safeStopForegroundService,
+} from '../utils/SafeNotifications';
 import { getJsonSettings } from '../storage/jsonSettings';
 import { ChapterDAO } from '../storage/dao/ChapterDAO';
 import { fetchBookmarks } from './other/bookmarks';
@@ -153,7 +159,7 @@ export const run = async () => {
     await runUpdate(useCompactNotification, settings);
   } finally {
     try {
-      await notifee.stopForegroundService();
+      await safeStopForegroundService();
     } catch (stopError) {
       console.log('[LibraryScheduler] Failed to stop foreground service:', stopError);
     }
@@ -162,13 +168,13 @@ export const run = async () => {
 
 const runUpdate = async (useCompactNotification, settings) => {
   try {
-    const channelId = await notifee.createChannel({
+    const channelId = await safeCreateChannel({
       id: 'updateWorks',
       name: 'Library Updates',
       importance: AndroidImportance.DEFAULT,
     });
 
-    const progressChannelId = await notifee.createChannel({
+    const progressChannelId = await safeCreateChannel({
       id: 'updateProgress',
       name: 'Update Progress',
       importance: AndroidImportance.LOW,
@@ -198,7 +204,7 @@ const runUpdate = async (useCompactNotification, settings) => {
       return work.chapterCount !== work.currentChapter;
     });
 
-    await notifee.displayNotification({
+    await safeDisplayNotification({
       id: 'scanning_progress',
       title: 'Checking for updates...',
       body: `Scanning ${toUpdate.length} works...`,
@@ -224,7 +230,7 @@ const runUpdate = async (useCompactNotification, settings) => {
 
     for (let i = 0; i < toUpdate.length; i++) {
       const uwork = toUpdate[i];
-      await notifee.displayNotification({
+      await safeDisplayNotification({
         id: 'scanning_progress',
         title: 'Updating your library...',
         body: `${Math.floor((i / toUpdate.length) * 100)}% : ${uwork.title}`,
@@ -275,7 +281,7 @@ const runUpdate = async (useCompactNotification, settings) => {
             const chaptersStr = newChapterNumbers.join(', ');
             const firstChapterNumber = newChapterNumbers[0];
 
-            await notifee.displayNotification({
+            await safeDisplayNotification({
               id: `work_${updatedWork.id}`,
               title: updatedWork.title,
               body: `Chapter ${chaptersStr}`,
@@ -302,11 +308,11 @@ const runUpdate = async (useCompactNotification, settings) => {
       }
     }
 
-    await notifee.cancelNotification('scanning_progress');
+    await safeCancelNotification('scanning_progress');
 
     if (updatedWorks.length > 0) {
       if (useCompactNotification) {
-        await notifee.displayNotification({
+        await safeDisplayNotification({
           id: 'updateComplete',
           title: 'Update complete',
           body: `Found updates for ${updatedWorks.length} works.`,
@@ -320,7 +326,7 @@ const runUpdate = async (useCompactNotification, settings) => {
           },
         });
       } else {
-        await notifee.displayNotification({
+        await safeDisplayNotification({
           id: 'group_summary',
           title: 'Library Updates',
           subtitle: `${updatedWorks.length} works updated`,
@@ -336,7 +342,7 @@ const runUpdate = async (useCompactNotification, settings) => {
     }
 
     if (errorWork.length > 0) {
-      await notifee.displayNotification({
+      await safeDisplayNotification({
         id: 'updateError',
         title: 'Update Issues',
         body: `Failed to update ${errorWork.length} works.`,

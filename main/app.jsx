@@ -51,6 +51,8 @@ import {
 } from 'react-native-safe-area-context';
 import SystemNavigationBar from 'react-native-system-navigation-bar';
 import { setup, setupNotificationListeners } from './web/updater';
+import { ensureNotificationPermission } from './utils/SafeNotifications';
+import { restoreSessionCookies } from './storage/Credentials';
 import { getJsonSettings, saveJsonSettings } from './storage/jsonSettings';
 import { getTempPreset, setTempPreset } from './storage/jsonSearches';
 import { checkTagCanonical } from './web/other/tagUtils';
@@ -623,7 +625,13 @@ const App = () => {
     }
 
     const checkInitialNotification = async () => {
-      const initialNotification = await notifee.getInitialNotification();
+      let initialNotification = null;
+      try {
+        initialNotification = await notifee.getInitialNotification();
+      } catch (err) {
+        console.warn('Could not read the initial notification:', err);
+        return;
+      }
 
       if (initialNotification) {
         if (initialNotification.notification.id === 'updateComplete') {
@@ -727,6 +735,10 @@ const App = () => {
     setJsonSettings(jsonSettings);
     setup(jsonSettings.time);
 
+    //The cookie jar doesn't necessarily survive a relaunch, the Keychain does.
+    //Push the stored session back into the jar before anything goes out over the network.
+    await restoreSessionCookies();
+
     if (Platform.OS === 'android') {
       try {
         const granted = await PermissionsAndroid.request(
@@ -735,6 +747,12 @@ const App = () => {
       } catch (err) {
         console.error(err);
       }
+    } else {
+      //iOS never grants notification authorisation on its own, so ask.
+      //A refusal (or a sandbox that can't grant it) is fine, downloads and
+      //library updates keep working silently. Deliberately not awaited, the
+      //system prompt would otherwise hold up the whole startup behind it.
+      ensureNotificationPermission();
     }
 
     try {

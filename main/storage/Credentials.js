@@ -100,18 +100,53 @@ export async function getCredsToken() {
   }
 }
 
+//AO3 wants both of these. Only the session cookie used to be written, and
+//only at login, so any install where the cookie jar doesn't survive a relaunch
+//(iOS in general, LiveContainer in particular) came back up holding a valid
+//token in the Keychain while every request went out anonymous. Kudos then fail
+//because the authenticity token and the POST belong to different sessions.
+async function writeSessionCookies(token) {
+  await CookieManager.set('https://archiveofourown.org', {
+    name: '_otwarchive_session',
+    value: token,
+    domain: 'archiveofourown.org',
+    path: '/',
+    version: '1',
+    secure: true,
+    httpOnly: true,
+  });
+
+  await CookieManager.set('https://archiveofourown.org', {
+    name: 'user_credentials',
+    value: '1',
+    domain: 'archiveofourown.org',
+    path: '/',
+    version: '1',
+    secure: true,
+  });
+}
+
+//Called on every app start. Reads the Keychain directly rather than going
+//through getCredsToken, which refreshes the last-login stamp as a side effect
+//and would quietly defeat the two week auto logout.
+export async function restoreSessionCookies() {
+  try {
+    const creds = await Keychain.getGenericPassword({ service: 'creds_token' });
+    if (!creds || !creds.password) return false;
+
+    await writeSessionCookies(creds.password);
+    console.log('Session cookies restored from the Keychain.');
+    return true;
+  } catch (error) {
+    console.warn('Could not restore session cookies:', error);
+    return false;
+  }
+}
+
 export async function setCredsToken(token) {
   try {
 
-    await CookieManager.set('https://archiveofourown.org', {
-      name: '_otwarchive_session',
-      value: token,
-      domain: 'archiveofourown.org',
-      path: '/',
-      version: '1',
-      secure: true,
-      httpOnly: true,
-    });
+    await writeSessionCookies(token);
 
     // Storing the token with a generic username 'ao3_token'
     await Keychain.setGenericPassword('ao3_token', token, { service: 'creds_token' });

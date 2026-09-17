@@ -30,20 +30,10 @@ export default async function sendKudo(workId) {
       },
     });
 
-    if (!response.ok) {
-      throw new Error(
-        `Failed to send kudos: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    // Check if kudos was successful by examining the response
-    // AO3 typically redirects back to the work page after successful kudos
-    if (response.url.includes(`/works/${workId}`)) {
-      console.log('Kudos sent successfully!');
-      return true;
-    }
-
+    //Read the body once, up front. AO3 answers 422 for "you already left
+    //kudos here", which is not something the user needs to see as a failure.
     const responseText = await response.text();
+
     if (
       responseText.includes('Thank you for leaving kudos!') ||
       responseText.includes('already left kudos')
@@ -52,8 +42,21 @@ export default async function sendKudo(workId) {
       return true;
     }
 
+    if (!response.ok) {
+      throw new Error(
+        `Failed to send kudos: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    // AO3 typically redirects back to the work page after successful kudos
+    if (response.url.includes(`/works/${workId}`)) {
+      console.log('Kudos sent successfully!');
+      return true;
+    }
+
     console.warn('Kudos request completed but success unclear');
-    console.log(response);
+    console.log(`status ${response.status}, url ${response.url}`);
+    console.log(responseText.slice(0, 500));
     return false;
   } catch (error) {
     console.error('Error sending kudos:', error);

@@ -1,6 +1,7 @@
 import RNFS from 'react-native-fs';
 import ky from 'ky';
 import { Buffer } from 'buffer';
+import { getSaveDirectory, getSavePath } from '../../utils/Paths';
 
 const FORMATS = ['azw3', 'epub', 'mobi', 'pdf', 'html'];
 
@@ -8,7 +9,7 @@ export async function nativeDownload(workId, format, name) {
   const url = `https://archiveofourown.org/downloads/${workId}/work.${format}`;
   const safeName = name.replace(/[/\\?%*:|"<>]/g, '_');
   const filename = `${safeName}.${format}`;
-  const destPath = `${RNFS.DownloadDirectoryPath}/${filename}`;
+  const destPath = getSavePath(filename);
 
   try {
     const arrayBuffer = await ky.get(url, {
@@ -26,6 +27,7 @@ export async function nativeDownload(workId, format, name) {
 
     const base64 = Buffer.from(arrayBuffer).toString('base64');
 
+    await RNFS.mkdir(getSaveDirectory());
     await RNFS.writeFile(destPath, base64, 'base64');
 
     return { success: true, path: destPath };

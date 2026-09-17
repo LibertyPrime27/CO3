@@ -22,24 +22,33 @@ export async function fetchLoginAuthenticityToken() {
 
 export async function fetchKudoAuthenticityToken(workId) {
   try {
-    let html = await getUrl("http://archiveofourown.org/works/" + workId);
-    html = html.replace("<br \\>", '');
+    //https, not http: iOS App Transport Security refuses cleartext requests
+    //outright, so the old http:// url could never load and every kudo failed.
+    //view_adult=true, or explicit works answer with the "this work could have
+    //adult content" interstitial, which carries no kudo form.
+    const html = await getUrl(
+      `https://archiveofourown.org/works/${workId}?view_adult=true`,
+    );
 
-    const doc = new DomParser().parseFromString(html, "text/html");
-    const kudoForm = doc.getElementById("new_kudo");
+    //Same trick as markForLater, the parser trips over AO3's markup often
+    //enough that matching the input directly is simply more reliable.
+    const kudoFormMatch = html.match(
+      /<form[^>]*id="new_kudo"[\s\S]*?<\/form>/i,
+    );
 
-    if (!kudoForm) {
-      throw new Error("Kudo form not found on the page");
+    const scope = kudoFormMatch ? kudoFormMatch[0] : html;
+    const token =
+      scope.match(/name="authenticity_token"[^>]*?value="([^"]+)"/i) ||
+      scope.match(/value="([^"]+)"[^>]*?name="authenticity_token"/i);
+
+    if (!token) {
+      if (html.includes('This work could have adult content')) {
+        throw new Error('Could not load the work page (adult content gate).');
+      }
+      throw new Error('Authenticity token not found on the work page.');
     }
 
-    // Find the authenticity token input within the form
-    const tokenInput = kudoForm.childNodes[0];
-
-    if (!tokenInput) {
-      throw new Error("Authenticity token not found in kudo form");
-    }
-
-    return tokenInput.getAttribute('value');
+    return token[1];
 
   } catch (e) {
     console.error("An error occurred while running fetchKudoAuthenticityToken", e);

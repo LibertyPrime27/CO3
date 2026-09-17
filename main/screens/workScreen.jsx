@@ -37,6 +37,7 @@ import { bookmark } from '../web/other/bookmarks';
 import { normalizeWorkData } from '../storage/dao/WorkDAO';
 import { getJsonSettings } from '../storage/jsonSettings';
 import { processQueue } from '../downloads/DownloadManager';
+import { getSaveDirectory, getSavePath } from '../utils/Paths';
 import {
   addToDownloadQueue,
   getDownloadQueue,
@@ -356,15 +357,17 @@ export const ReaderWrapper = ({ route }) => {
         settingsDAO,
       });
 
-      if (!jsonSettings) {
-        jsonSettings = await getJsonSettings(chapterData);
-      }
+      //jsonSettings comes off route.params as a const, so the old
+      //reassignment threw "Assignment to constant variable" whenever it was
+      //missing. The throw landed in the catch below, which meant download
+      //while reading silently never ran and the reader showed an error.
+      const settings = jsonSettings ?? (await getJsonSettings());
 
       if (
-        jsonSettings?.downloadWhileReading &&
+        settings?.downloadWhileReading &&
         (await libraryDAO.isInLibrary(chapterData.workId))
       ) {
-        for (let i = 0; i < jsonSettings?.downloadWhileReading; i++) {
+        for (let i = 0; i < settings.downloadWhileReading; i++) {
           const index = chapterData.chapterIndex + 2 + i;
           if (chapterList.length <= index) break;
           await addToDownloadQueue({
@@ -1544,10 +1547,11 @@ const ChapterInfoScreen = ({ route }) => {
       '_',
     );
     const filename = `${safeName}.${format}`;
-    const destPath = `${RNFS.DownloadDirectoryPath}/${filename}`;
+    const destPath = getSavePath(filename);
 
     setNativeDownloadingFormat(format);
     try {
+      await RNFS.mkdir(getSaveDirectory());
       const result = await RNFS.downloadFile({ fromUrl: url, toFile: destPath })
         .promise;
       if (result.statusCode === 200) {

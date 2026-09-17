@@ -1,4 +1,9 @@
-import notifee, { AndroidImportance } from 'react-native-notify-kit';
+import { AndroidImportance } from 'react-native-notify-kit';
+import {
+  safeCancelNotification,
+  safeCreateChannel,
+  safeDisplayNotification,
+} from '../utils/SafeNotifications';
 import { getDownloadQueue, popNextDownload } from './DownloadQueue';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceEventEmitter } from 'react-native';
@@ -65,7 +70,7 @@ export async function processQueue() {
       return;
     }
 
-    await notifee.createChannel({
+    await safeCreateChannel({
       id: CHANNEL_ID,
       name: 'Downloads',
       importance: AndroidImportance.LOW,
@@ -80,7 +85,7 @@ export async function processQueue() {
       const currentTotal = processed + queue.length;
       if (currentTotal > initialTotal) initialTotal = currentTotal;
 
-      await notifee.displayNotification({
+      await safeDisplayNotification({
         id: NOTIFICATION_ID,
         title: 'Downloading Chapters',
         body: `Processing item ${processed + 1} of ${initialTotal}`,
@@ -114,10 +119,10 @@ export async function processQueue() {
   } finally {
     isProcessing = false;
 
-    await notifee.cancelNotification(NOTIFICATION_ID);
+    await safeCancelNotification(NOTIFICATION_ID);
 
     if (failedCount > 0 || successCount > 0) {
-      await notifee.displayNotification({
+      await safeDisplayNotification({
         id: 'download_summary', // Different ID so it doesn't get cancelled
         title: failedCount > 0 ? 'Download Finished with Errors' : 'Downloads Complete',
         body: `${successCount} succeeded, ${failedCount} failed.`,

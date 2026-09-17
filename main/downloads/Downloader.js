@@ -7,7 +7,17 @@ export function buildPath(workId, chapterId) {
 }
 
 export async function downloadChapter(workId, chapterId) {
-  const [html, css] = await fetchChapter(workId, chapterId, true);
+  const chapter = await fetchChapter(workId, chapterId, true);
+
+  //fetchChapter returns null when it can't find the work body, which used to
+  //surface as "null is not iterable" from the destructuring below.
+  if (!chapter) {
+    throw new Error(
+      `No chapter content found for chapter ${chapterId} of work ${workId}`,
+    );
+  }
+
+  const [html, css] = chapter;
   await saveFile(html, css, workId, chapterId);
 }
 
@@ -23,7 +33,10 @@ const saveFile = async (html, css, workId, chapterId) => {
     await RNFS.writeFile(path + ".css", css, 'utf8');
     console.log(`Download successful ${chapterId} from work ${workId} to ${path}.html and .css`);
   } catch (err) {
-    console.log(err.message);
+    //This used to be swallowed, so a chapter that failed to write still
+    //reported as downloaded and the queue happily moved on.
+    console.error(`Failed to save chapter ${chapterId} of work ${workId}:`, err);
+    throw err;
   }
 };
 
