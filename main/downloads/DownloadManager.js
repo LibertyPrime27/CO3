@@ -1,9 +1,3 @@
-import { AndroidImportance } from 'react-native-notify-kit';
-import {
-  safeCancelNotification,
-  safeCreateChannel,
-  safeDisplayNotification,
-} from '../utils/SafeNotifications';
 import {
   clearDownloadQueue,
   getDownloadQueue,
@@ -12,11 +6,8 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceEventEmitter } from 'react-native';
 import { downloadChapter, isDownloaded } from './Downloader';
-import { getJsonSettings } from '../storage/jsonSettings';
 
 const FAILED_LIST_KEY = 'failedDownloads';
-const CHANNEL_ID = 'download_channel';
-const NOTIFICATION_ID = 'download_progress';
 
 //A chapter is a few hundred KB of HTML. If it hasn't arrived in this long,
 //something upstream is wedged (a Cloudflare interstitial nobody can see, a
@@ -116,31 +107,12 @@ export async function processQueue() {
   let successCount = 0;
   let cancelledCount = 0;
 
-  //"Background downloads" off means notifee is never touched from here. It is
-  //the escape hatch for sandboxed installs where the notification module
-  //itself misbehaves.
-  const settings = await getJsonSettings();
-  const notify = settings.backgroundDownloads !== false;
-
   try {
     let queue = await getDownloadQueue();
-    let initialTotal = queue.length;
-    let processed = 0;
 
-    if (initialTotal === 0) {
+    if (queue.length === 0) {
       isProcessing = false;
       return;
-    }
-
-    //Notification calls below are deliberately not awaited. They are
-    //decoration; the chapter fetch must never sit behind them, and the safe
-    //wrappers never reject so there is nothing to catch.
-    if (notify) {
-      safeCreateChannel({
-        id: CHANNEL_ID,
-        name: 'Downloads',
-        importance: AndroidImportance.LOW,
-      });
     }
 
     while (true) {
@@ -150,27 +122,6 @@ export async function processQueue() {
       const item = queue[0];
       const key = keyOf(item.workId, item.chapterId);
       currentKey = key;
-
-      const currentTotal = processed + queue.length;
-      if (currentTotal > initialTotal) initialTotal = currentTotal;
-
-      if (notify) {
-        safeDisplayNotification({
-          id: NOTIFICATION_ID,
-          title: 'Downloading Chapters',
-          body: `Processing item ${processed + 1} of ${initialTotal}`,
-          android: {
-            channelId: CHANNEL_ID,
-            ongoing: true,
-            onlyAlertOnce: true,
-            progress: {
-              max: initialTotal,
-              current: processed,
-              indeterminate: false
-            },
-          },
-        });
-      }
 
       try {
         await downloadTask(item);
@@ -192,7 +143,6 @@ export async function processQueue() {
         cancelledKeys.delete(key);
         currentKey = null;
         await removeFromDownloadQueue(item.workId, item.chapterId);
-        processed++;
       }
     }
 
@@ -202,18 +152,10 @@ export async function processQueue() {
     isProcessing = false;
     currentKey = null;
 
-    if (notify) {
-      safeCancelNotification(NOTIFICATION_ID);
-
-      if (failedCount > 0 || successCount > 0) {
-        safeDisplayNotification({
-          id: 'download_summary', // Different ID so it doesn't get cancelled
-          title: failedCount > 0 ? 'Download Finished with Errors' : 'Downloads Complete',
-          body: `${successCount} succeeded, ${failedCount} failed${cancelledCount ? `, ${cancelledCount} cancelled` : ''}.`,
-          android: { channelId: CHANNEL_ID },
-        });
-      }
-    }
+    console.log(
+      `Download queue finished: ${successCount} succeeded, ${failedCount} failed` +
+        `${cancelledCount ? `, ${cancelledCount} cancelled` : ''}.`,
+    );
   }
 }
 

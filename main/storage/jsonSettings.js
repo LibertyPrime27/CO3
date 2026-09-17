@@ -20,7 +20,6 @@ const DEFAULT_SETTINGS = {
   allowSelectingText: false,
   downloadWhileReading: 0,
   downloadOnUpdate: false,
-  backgroundDownloads: true,
 
   finishedOnboarding: false,
 
