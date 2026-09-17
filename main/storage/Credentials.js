@@ -118,24 +118,39 @@ export async function hasStoredToken() {
 //token in the Keychain while every request went out anonymous. Kudos then fail
 //because the authenticity token and the POST belong to different sessions.
 async function writeSessionCookies(token) {
-  await CookieManager.set('https://archiveofourown.org', {
-    name: '_otwarchive_session',
-    value: token,
-    domain: 'archiveofourown.org',
-    path: '/',
-    version: '1',
-    secure: true,
-    httpOnly: true,
-  });
+  const cookies = [
+    {
+      name: '_otwarchive_session',
+      value: token,
+      domain: 'archiveofourown.org',
+      path: '/',
+      version: '1',
+      secure: true,
+      httpOnly: true,
+    },
+    {
+      name: 'user_credentials',
+      value: '1',
+      domain: 'archiveofourown.org',
+      path: '/',
+      version: '1',
+      secure: true,
+    },
+  ];
 
-  await CookieManager.set('https://archiveofourown.org', {
-    name: 'user_credentials',
-    value: '1',
-    domain: 'archiveofourown.org',
-    path: '/',
-    version: '1',
-    secure: true,
-  });
+  for (const cookie of cookies) {
+    await CookieManager.set('https://archiveofourown.org', cookie);
+
+    //WKWebView keeps a separate cookie store on iOS. Without this the WebView
+    //browses logged out, and AO3 answers logged-out requests from its full
+    //page cache, whose embedded CSRF tokens are stale by design.
+    try {
+      await CookieManager.set('https://archiveofourown.org', cookie, true);
+    } catch (e) {
+      //Android has no separate WebKit store; a failure here is not fatal.
+      console.warn('Could not mirror the session into the WebKit store:', e);
+    }
+  }
 }
 
 //Called on every app start. Reads the Keychain directly rather than going

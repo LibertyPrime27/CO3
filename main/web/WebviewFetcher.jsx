@@ -75,8 +75,13 @@ export default function WebviewFetcher() {
   const httpErrorRef = useRef(null);
 
   const loadCurrent = () => {
+    //The in-flight item can be gone already: its deadline may have fired and
+    //settled it while the Cloudflare warning was still on screen, and
+    //onWarningDismiss calls straight back in here.
+    const item = currentRef.current;
+    if (!item) return;
     setVisible(false);
-    setSource({ uri: currentRef.current.url });
+    setSource({ uri: item.url });
   };
 
   const processNext = () => {
