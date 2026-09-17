@@ -4,8 +4,18 @@ import getUrl from '../requestManager';
 let DomParser = require('react-native-html-parser').DOMParser;
 
 export async function fetchChapter(workId, chapterId, noWebview = false) {
+  //One-shots have no real chapter id. fetchWork synthesises `-workId` for them
+  //(fetchComments already normalises it with Math.abs), and without doing the
+  //same here the request became /works/123/chapters/-123, a guaranteed 404,
+  //so a one-shot could never be downloaded.
+  const numericChapterId = Number(chapterId);
+  const isWorkItself =
+    !chapterId ||
+    numericChapterId < 0 ||
+    String(Math.abs(numericChapterId)) === String(workId);
+
   let url;
-  if (!chapterId || String(chapterId) === String(workId)) {
+  if (isWorkItself) {
     url = `https://archiveofourown.org/works/${workId}?view_adult=true`;
   } else {
     url = `https://archiveofourown.org/works/${workId}/chapters/${chapterId}?view_adult=true`;

@@ -11,8 +11,10 @@ import {
   FlatList,
   Linking,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
+  Share,
   StatusBar,
   StyleSheet,
   Text,
@@ -36,7 +38,11 @@ import Toast from 'react-native-toast-message';
 import { bookmark } from '../web/other/bookmarks';
 import { normalizeWorkData } from '../storage/dao/WorkDAO';
 import { getJsonSettings } from '../storage/jsonSettings';
-import { processQueue } from '../downloads/DownloadManager';
+import {
+  cancelAllDownloads,
+  cancelDownload,
+  processQueue,
+} from '../downloads/DownloadManager';
 import { getSaveDirectory, getSavePath } from '../utils/Paths';
 import {
   addToDownloadQueue,
@@ -130,7 +136,7 @@ const ChapterItem = React.memo(
           ) {
             setIsInQueue(false);
             setIsDownloadedFile(data.success);
-            if (!data.success) setHasFailed(true);
+            if (!data.success && !data.cancelled) setHasFailed(true);
           }
         },
       );
@@ -156,7 +162,11 @@ const ChapterItem = React.memo(
     }, [chapter.id, chapter.workId]);
 
     const handleDownloadPress = async () => {
-      if (isInQueue) return;
+      if (isInQueue) {
+        //Tap the spinner to cancel. queue_updated will clear the spinner.
+        await cancelDownload(chapter.workId, chapter.id);
+        return;
+      }
       if (isDownloadedFile) {
         if (showDelete) {
           try {
@@ -185,6 +195,22 @@ const ChapterItem = React.memo(
       if (hasFailed) {
         const failedJson = await AsyncStorage.getItem('failedDownloads');
         const failedList = failedJson ? JSON.parse(failedJson) : [];
+        const failedEntry = failedList.find(
+          f => String(f.chapterId) === String(chapter.id),
+        );
+
+        //The reason was always recorded, it was just never shown to anyone.
+        //Say why it failed before quietly trying again, so a user can
+        //actually report something useful.
+        if (failedEntry?.reason) {
+          Toast.show({
+            type: 'error',
+            text1: t('screen_work_toast_download_failed'),
+            text2: failedEntry.reason,
+            visibilityTime: 6000,
+          });
+        }
+
         const newList = failedList.filter(
           f => String(f.chapterId) !== String(chapter.id),
         );
@@ -1086,6 +1112,15 @@ const ChapterInfoScreen = ({ route }) => {
             ]}
           />
 
+          <TouchableOpacity style={styles.menuItem} onPress={cancelAllChapterDownloads}>
+            <Icon name="cancel" size={20} color={currentTheme.textColor} />
+            <Text
+              style={[styles.menuItemText, { color: currentTheme.textColor }]}
+            >
+              {t('screen_work_cancel_all_downloads')}
+            </Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.menuItem} onPress={deleteAllChapters}>
             <Icon name="delete" size={20} color={currentTheme.textColor} />
             <Text
@@ -1531,6 +1566,15 @@ const ChapterInfoScreen = ({ route }) => {
     setDownloadMenuVisible(false);
   }
 
+  async function cancelAllChapterDownloads() {
+    setDownloadMenuVisible(false);
+    const count = await cancelAllDownloads();
+    showToast(
+      t('screen_work_toast_downloads_cancelled', { count }),
+      count > 0 ? 'success' : 'error',
+    );
+  }
+
   async function deleteAllChapters() {
     setDownloadMenuVisible(false);
     for (const chapter of chapters) {
@@ -1552,16 +1596,39 @@ const ChapterInfoScreen = ({ route }) => {
     setNativeDownloadingFormat(format);
     try {
       await RNFS.mkdir(getSaveDirectory());
-      const result = await RNFS.downloadFile({ fromUrl: url, toFile: destPath })
-        .promise;
+      const result = await RNFS.downloadFile({
+        fromUrl: url,
+        toFile: destPath,
+        //Same browser identity the rest of the app presents to AO3. Without
+        //it the bare CFNetwork agent is a prime Cloudflare target.
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          Accept: '*/*',
+        },
+      }).promise;
       if (result.statusCode === 200) {
         Toast.show({
           type: 'success',
           text1: t('screen_work_toast_download_complete'),
-          text2: t('screen_work_toast_download_complete_sub', {
-            filename: filename,
-          }),
+          text2: t(
+            Platform.OS === 'ios'
+              ? 'screen_work_toast_download_complete_sub_ios'
+              : 'screen_work_toast_download_complete_sub',
+            { filename: filename },
+          ),
         });
+
+        //On iOS a file in the app's Documents folder is invisible unless the
+        //user goes looking in Files. Offer the share sheet so it can go
+        //straight to Books, Files, or another reader. Dismissing it is fine.
+        if (Platform.OS === 'ios') {
+          try {
+            await Share.share({ url: `file://${destPath}` });
+          } catch (shareErr) {
+            console.log('Share sheet dismissed or unavailable:', shareErr?.message);
+          }
+        }
       } else {
         Toast.show({
           type: 'error',

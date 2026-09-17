@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import notifee from 'react-native-notify-kit';
 
 //AuthorizationStatus values, inlined rather than imported: the web/electron
@@ -17,6 +18,20 @@ const PROVISIONAL = 2;
 let permissionPromise = null;
 let notificationsDisabled = false;
 
+//A native promise that never settles (the permission alert can't be presented
+//inside a guest container, or the module is half-loaded) must not be allowed to
+//wedge anything that awaits us. Race it against a clock and treat a timeout as
+//"not authorised".
+const PERMISSION_TIMEOUT_MS = 8000;
+
+function withTimeout(promise, ms, fallback) {
+  let timer;
+  const clock = new Promise(resolve => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([promise, clock]).finally(() => clearTimeout(timer));
+}
+
 function warn(action, error) {
   console.warn(
     `[Notifications] ${action} failed, continuing without it:`,
@@ -29,7 +44,15 @@ export async function ensureNotificationPermission() {
   if (!permissionPromise) {
     permissionPromise = (async () => {
       try {
-        const settings = await notifee.requestPermission();
+        const settings = await withTimeout(
+          notifee.requestPermission(),
+          PERMISSION_TIMEOUT_MS,
+          null,
+        );
+        if (settings === null) {
+          console.warn('[Notifications] permission request timed out.');
+          return false;
+        }
         const status = settings?.authorizationStatus;
         return status === AUTHORIZED || status === PROVISIONAL;
       } catch (e) {
@@ -39,12 +62,6 @@ export async function ensureNotificationPermission() {
     })();
   }
   return permissionPromise;
-}
-
-//True once we know notifications can't be shown, so a 400 chapter queue
-//doesn't fire 400 doomed native calls.
-export function notificationsAvailable() {
-  return !notificationsDisabled;
 }
 
 export async function safeCreateChannel(channel) {
@@ -60,7 +77,12 @@ export async function safeCreateChannel(channel) {
 export async function safeDisplayNotification(notification) {
   if (notificationsDisabled) return null;
 
-  if (!(await ensureNotificationPermission())) {
+  //Only iOS refuses the post outright without authorisation. On Android a
+  //denied POST_NOTIFICATIONS silently drops the notification from the shade
+  //but still starts a foreground service attached to it, and the library
+  //updater depends on exactly that to survive the headless timeout. So the
+  //permission gate, and the latch below, are iOS-only.
+  if (Platform.OS === 'ios' && !(await ensureNotificationPermission())) {
     notificationsDisabled = true;
     console.log(
       '[Notifications] not authorised, running silently for this session.',
@@ -69,9 +91,13 @@ export async function safeDisplayNotification(notification) {
   }
 
   try {
-    return await notifee.displayNotification(notification);
+    return await withTimeout(
+      notifee.displayNotification(notification),
+      PERMISSION_TIMEOUT_MS,
+      null,
+    );
   } catch (e) {
-    notificationsDisabled = true;
+    if (Platform.OS === 'ios') notificationsDisabled = true;
     warn('displayNotification', e);
     return null;
   }

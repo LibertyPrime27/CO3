@@ -55,6 +55,7 @@ const PreferencesScreen = ({ route }) => {
   const [preferDesc, setPreferDesc] = useState(false);
   const [allowSelect, setAllowSelect] = useState(false);
   const [downloadOnUpdate, setDownloadOnUpdate] = useState(false);
+  const [backgroundDownloads, setBackgroundDownloads] = useState(true);
   const [downloadWhileReading, setDownloadWhileReading] = useState(0);
   const [preferHtml, setPreferHtml] = useState(false);
   const [showStatusBadge, setShowStatusBadge] = useState(false);
@@ -104,6 +105,7 @@ const PreferencesScreen = ({ route }) => {
         setAllowSelect(jsonSettings.allowSelectingText || false);
         setDownloadWhileReading(jsonSettings.downloadWhileReading || 0);
         setDownloadOnUpdate(jsonSettings.downloadOnUpdate || false);
+        setBackgroundDownloads(jsonSettings.backgroundDownloads !== false);
 
         // Handle array wrapper for restriction
         const restriction = Array.isArray(jsonSettings.updateRestriction)
@@ -270,6 +272,12 @@ const PreferencesScreen = ({ route }) => {
     const newValue = !downloadOnUpdate;
     setDownloadOnUpdate(newValue);
     saveJsonSettingsData({ downloadOnUpdate: newValue });
+  };
+
+  const handleBackgroundDownloadsChange = () => {
+    const newValue = !backgroundDownloads;
+    setBackgroundDownloads(newValue);
+    saveJsonSettingsData({ backgroundDownloads: newValue });
   };
 
   const handleLanguageChange = async lng => {
@@ -1014,6 +1022,42 @@ const PreferencesScreen = ({ route }) => {
                 onValueChange={handleDownloadOnUpdateChange}
                 thumbColor={
                   downloadOnUpdate ? activeTheme.primaryColor : '#f4f3f4'
+                }
+                trackColor={{
+                  false: '#767577',
+                  true: `${activeTheme.primaryColor}40`,
+                }}
+              />
+            </View>
+          </View>
+          <View
+            style={[
+              styles.settingItem,
+              { borderBottomColor: activeTheme.borderColor },
+            ]}
+          >
+            <View style={styles.switchContainer}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text
+                  style={[{ color: activeTheme.textColor }, styles.settingText]}
+                >
+                  {t('screen_preferences_setting_background_downloads')}
+                </Text>
+                <Text
+                  style={{
+                    color: activeTheme.secondaryTextColor,
+                    fontSize: 12,
+                    marginTop: 4,
+                  }}
+                >
+                  {t('screen_preferences_setting_background_downloads_desc')}
+                </Text>
+              </View>
+              <Switch
+                value={backgroundDownloads}
+                onValueChange={handleBackgroundDownloadsChange}
+                thumbColor={
+                  backgroundDownloads ? activeTheme.primaryColor : '#f4f3f4'
                 }
                 trackColor={{
                   false: '#767577',

@@ -16,7 +16,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deleteDownloaded, isDownloaded } from '../../downloads/Downloader';
 import Toast from 'react-native-toast-message';
-import { processQueue } from '../../downloads/DownloadManager';
+import { cancelDownload, processQueue } from '../../downloads/DownloadManager';
 import { useTranslation } from 'react-i18next';
 
 const imageMappings = {
@@ -113,7 +113,7 @@ const UpdateBookCard = ({ update, workDAO, theme, onPress }) => {
       if (isMounted.current && String(data.chapterId) === String(update.chapterID)) {
         setIsInQueue(false);
         setIsDownloadedFile(data.success);
-        if (!data.success) setHasFailed(true);
+        if (!data.success && !data.cancelled) setHasFailed(true);
       }
     });
 
@@ -135,7 +135,10 @@ const UpdateBookCard = ({ update, workDAO, theme, onPress }) => {
   }, [update.chapterID, update.workId])
 
   const handleDownloadPress = async () => {
-    if (isInQueue) return;
+    if (isInQueue) {
+      await cancelDownload(update.workId, update.chapterID);
+      return;
+    }
     if (isDownloadedFile) {
       if (showDelete) {
         try {

@@ -7,7 +7,12 @@ export function buildPath(workId, chapterId) {
 }
 
 export async function downloadChapter(workId, chapterId) {
-  const chapter = await fetchChapter(workId, chapterId, true);
+  //No noWebview here. That flag exists for Android's headless updater, which
+  //has no UI to host a WebView. Downloads are always started from a screen,
+  //and passing it skipped the Cloudflare-mode WebView path that every other
+  //read in the app relies on, so in anti-bot mode chapters failed while
+  //browsing and kudos kept working.
+  const chapter = await fetchChapter(workId, chapterId);
 
   //fetchChapter returns null when it can't find the work body, which used to
   //surface as "null is not iterable" from the destructuring below.

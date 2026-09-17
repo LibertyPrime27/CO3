@@ -55,6 +55,13 @@ const CF_CHALLENGE_DETECTION = `
 
 const CF_INTERIM_STATUSES = new Set([403, 503]);
 
+//The queue is strictly one-at-a-time. An item whose WebView never fires
+//onLoadEnd/onError/onMessage (a challenge nobody can see, a sandbox that
+//never renders it) used to hold currentRef forever, and every later fetch in
+//the whole app queued up behind it. Generous, because an interactive
+//challenge legitimately needs the user, but finite.
+const WEBVIEW_FETCH_TIMEOUT_MS = 120 * 1000;
+
 export const ACCEPTED_TOS_KEY = 'accepted_tos';
 
 // --- Component ---
@@ -74,14 +81,34 @@ export default function WebviewFetcher() {
 
   const processNext = () => {
     if (currentRef.current || queue.length === 0) return;
-    currentRef.current = queue.shift();
+    const item = queue.shift();
+    currentRef.current = item;
     httpErrorRef.current = null;
+    item.timer = setTimeout(() => {
+      if (currentRef.current !== item) return;
+      setShowCFWarning(false);
+      settle(null, new WebViewFetchError(0, 'WebView fetch timed out', item.url));
+    }, WEBVIEW_FETCH_TIMEOUT_MS);
     loadCurrent();
   };
 
   useEffect(() => {
     triggerNext = processNext;
-    return () => { triggerNext = null; };
+    return () => {
+      triggerNext = null;
+      //Unmounting with work outstanding: fail it rather than strand callers
+      //on promises nothing will ever settle.
+      const inFlight = currentRef.current;
+      currentRef.current = null;
+      if (inFlight) {
+        clearTimeout(inFlight.timer);
+        inFlight.reject(new WebViewFetchError(0, 'WebView unmounted', inFlight.url));
+      }
+      while (queue.length) {
+        const q = queue.shift();
+        q.reject(new WebViewFetchError(0, 'WebView unmounted', q.url));
+      }
+    };
   }, []);
 
   const onWarningDismiss = () => {
@@ -92,6 +119,7 @@ export default function WebviewFetcher() {
   const settle = (value, error) => {
     const item = currentRef.current;
     currentRef.current = null;
+    clearTimeout(item?.timer);
     setSource(null);
     setVisible(false);
     error ? item?.reject(error) : item?.resolve(value);

@@ -100,6 +100,18 @@ export async function getCredsToken() {
   }
 }
 
+//Side-effect free existence check. getCredsToken() stamps last-login as a side
+//effect, so it can't be used to decide whether the last-login check applies.
+export async function hasStoredToken() {
+  try {
+    const creds = await Keychain.getGenericPassword({ service: 'creds_token' });
+    return !!(creds && creds.password);
+  } catch (error) {
+    console.warn('Failed to check for a stored token:', error);
+    return false;
+  }
+}
+
 //AO3 wants both of these. Only the session cookie used to be written, and
 //only at login, so any install where the cookie jar doesn't survive a relaunch
 //(iOS in general, LiveContainer in particular) came back up holding a valid

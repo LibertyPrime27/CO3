@@ -20,7 +20,7 @@ import { getJsonSettings } from '../storage/jsonSettings';
 import { ChapterDAO } from '../storage/dao/ChapterDAO';
 import { fetchBookmarks } from './other/bookmarks';
 import { LibraryDAO } from '../storage/dao/LibraryDAO';
-import { getUsername } from '../storage/Credentials';
+import { getUsername, restoreSessionCookies } from '../storage/Credentials';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { LibraryScheduler } = NativeModules;
@@ -152,17 +152,17 @@ export const cancel = () => {
 };
 
 export const run = async () => {
+  //The headless task never mounts <App />, so the startup cookie restore in
+  //app.jsx never ran for it and every update went out anonymous.
+  await restoreSessionCookies();
+
   const settings = await getJsonSettings();
   const useCompactNotification = settings.compactNotifications;
 
   try {
     await runUpdate(useCompactNotification, settings);
   } finally {
-    try {
-      await safeStopForegroundService();
-    } catch (stopError) {
-      console.log('[LibraryScheduler] Failed to stop foreground service:', stopError);
-    }
+    await safeStopForegroundService();
   }
 };
 
