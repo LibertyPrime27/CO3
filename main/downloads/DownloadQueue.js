@@ -36,25 +36,9 @@ export async function addToDownloadQueue(items) {
   }
 }
 
-export async function popNextDownload() {
-  try {
-    const queue = await getDownloadQueue();
-    if (queue.length === 0) return null;
-
-    const nextItem = queue.shift();
-    await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
-
-    DeviceEventEmitter.emit('queue_updated', queue);
-
-    return nextItem;
-  } catch (error) {
-    console.error('Error popping from queue:', error);
-  }
-}
-
-//Removes one specific item wherever it sits. The manager uses this instead of
-//popNextDownload so that cancelling the chapter currently being fetched can't
-//knock the wrong entry off the front of the queue.
+//Removes one specific item wherever it sits, rather than shifting the head, so
+//cancelling the chapter currently being fetched can't knock the wrong entry off
+//the front of the queue.
 export async function removeFromDownloadQueue(workId, chapterId) {
   try {
     const queue = await getDownloadQueue();
@@ -83,9 +67,4 @@ export async function clearDownloadQueue() {
   } catch (error) {
     console.error('Error clearing downloadQueue:', error);
   }
-}
-
-export async function peekNextDownload() {
-  const queue = await getDownloadQueue();
-  return queue.length > 0 ? queue[0] : null;
 }
