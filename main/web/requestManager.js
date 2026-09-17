@@ -42,6 +42,36 @@ async function enableCFMode(domain) {
   await AsyncStorage.setItem(CF_STORAGE_KEY, JSON.stringify(map));
 }
 
+const TIMEOUT_STRIKE_KEY = 'cf_timeout_strikes';
+const TIMEOUT_STRIKES_BEFORE_CF = 3;
+const TIMEOUT_STRIKE_WINDOW = 10 * 60 * 1000; // 10 minutes
+
+//Returns true once a host has timed out enough times in a short window that
+//Cloudflare is the likely explanation rather than one slow page.
+async function recordTimeoutStrike(domain) {
+  try {
+    const raw = await AsyncStorage.getItem(TIMEOUT_STRIKE_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    const now = Date.now();
+    const entry = map[domain];
+    const fresh = entry && now - entry.first < TIMEOUT_STRIKE_WINDOW;
+
+    const count = fresh ? entry.count + 1 : 1;
+    map[domain] = { count, first: fresh ? entry.first : now };
+    await AsyncStorage.setItem(TIMEOUT_STRIKE_KEY, JSON.stringify(map));
+
+    if (count >= TIMEOUT_STRIKES_BEFORE_CF) {
+      delete map[domain];
+      await AsyncStorage.setItem(TIMEOUT_STRIKE_KEY, JSON.stringify(map));
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.warn('Could not record a timeout strike:', e);
+    return false;
+  }
+}
+
 function isCFChallenge(html) {
   return html.includes('_cf_chl_opt');
 }
@@ -158,7 +188,15 @@ export default async function getUrl(url, noWebview = false) {
       return fetchViaWebView(url, { cfWarning: true });
     }
     if (err instanceof TimeoutError) {
-      await enableCFMode(hostname);
+      //A timeout is not proof of Cloudflare. Bulk chapter downloads are by far
+      //the most timeout-prone thing the app does, and one slow chapter used to
+      //be enough to put every request in the app behind the WebView for 24h -
+      //which silently moved the kudo token onto a different session than the
+      //POST that uses it. Retry through the WebView for this request only, and
+      //make it take a few strikes before it becomes the app-wide mode.
+      if (await recordTimeoutStrike(hostname)) {
+        await enableCFMode(hostname);
+      }
       return fetchViaWebView(url, { cfWarning: true });
     }
     throw err;

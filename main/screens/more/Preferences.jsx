@@ -1037,22 +1037,11 @@ const PreferencesScreen = ({ route }) => {
             ]}
           >
             <View style={styles.switchContainer}>
-              <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text
-                  style={[{ color: activeTheme.textColor }, styles.settingText]}
-                >
-                  {t('screen_preferences_setting_background_downloads')}
-                </Text>
-                <Text
-                  style={{
-                    color: activeTheme.secondaryTextColor,
-                    fontSize: 12,
-                    marginTop: 4,
-                  }}
-                >
-                  {t('screen_preferences_setting_background_downloads_desc')}
-                </Text>
-              </View>
+              <Text
+                style={[{ color: activeTheme.textColor }, styles.settingText]}
+              >
+                {t('screen_preferences_setting_background_downloads')}
+              </Text>
               <Switch
                 value={backgroundDownloads}
                 onValueChange={handleBackgroundDownloadsChange}

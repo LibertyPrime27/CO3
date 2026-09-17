@@ -1,5 +1,4 @@
 import { fetchKudoAuthenticityToken } from '../account/fetchAuthenticityToken';
-import { getCredsToken } from '../../storage/Credentials';
 
 export default async function sendKudo(workId) {
   try {
@@ -26,7 +25,11 @@ export default async function sendKudo(workId) {
         Referer: `https://archiveofourown.org/works/${workId}`,
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        Cookie: `user_credentials=1; _otwarchive_session=${await getCredsToken()}`,
+        //No hand-rolled Cookie header. On iOS NSURLSession fills cookies from
+        //the shared jar and drops a manual one, so pinning the Keychain value
+        //never actually applied - it only hid which session was really used.
+        //credentials:'include' keeps this POST on the same jar the token was
+        //minted on, which is what AO3's per-form CSRF check requires.
       },
     });
 
