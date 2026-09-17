@@ -1606,6 +1606,14 @@ const ChapterInfoScreen = ({ route }) => {
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
           Accept: '*/*',
         },
+        //AO3 builds the epub/pdf on demand when you ask for it. On a long work
+        //that can take a minute before the first byte arrives, and RNFS
+        //defaults readTimeout to 15s, which it feeds straight into
+        //NSURLSession's timeoutIntervalForRequest - so the download died of a
+        //timeout while AO3 was still assembling the file.
+        connectionTimeout: 30 * 1000,
+        readTimeout: 5 * 60 * 1000,
+        backgroundTimeout: 10 * 60 * 1000,
       }).promise;
       if (result.statusCode === 200) {
         Toast.show({
@@ -1630,6 +1638,9 @@ const ChapterInfoScreen = ({ route }) => {
           }
         }
       } else {
+        //RNFS writes the body whatever the status, so a rejection leaves a
+        //Cloudflare error page sitting on disk named Something.epub.
+        await RNFS.unlink(destPath).catch(() => {});
         Toast.show({
           type: 'error',
           text1: t('screen_work_toast_download_failed'),
@@ -1639,10 +1650,11 @@ const ChapterInfoScreen = ({ route }) => {
         });
       }
     } catch (err) {
+      await RNFS.unlink(destPath).catch(() => {});
       Toast.show({
         type: 'error',
         text1: t('screen_work_toast_download_failed'),
-        text2: err.message,
+        text2: err?.message ?? String(err),
       });
     } finally {
       setNativeDownloadingFormat(null);
