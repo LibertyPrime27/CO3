@@ -7,11 +7,14 @@ export function buildPath(workId, chapterId) {
 }
 
 export async function downloadChapter(workId, chapterId) {
-  //No noWebview here. That flag exists for Android's headless updater, which
-  //has no UI to host a WebView. Downloads are always started from a screen,
-  //and passing it skipped the Cloudflare-mode WebView path that every other
-  //read in the app relies on, so in anti-bot mode chapters failed while
-  //browsing and kudos kept working.
+  //No noWebview here. Note that downloads are NOT always screen-triggered:
+  //Android's headless library updater reaches this through
+  //fetchWorkFromWorkID -> processQueue, with no UI mounted to host a WebView.
+  //That only matters if a fetch is actually challenged, since getUrl tries the
+  //direct request first and the WebView is a fallback rather than a route.
+  //If that fallback ever needs to work headlessly, WebviewFetcher has to
+  //report whether its host component is mounted and getUrl treat an unmounted
+  //host as noWebview.
   const chapter = await fetchChapter(workId, chapterId);
 
   //fetchChapter returns null when it can't find the work body, which used to

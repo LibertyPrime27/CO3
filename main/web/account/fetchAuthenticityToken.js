@@ -1,4 +1,6 @@
 import ky from 'ky';
+import { Platform } from 'react-native';
+import getUrl from '../requestManager';
 
 let DomParser = require('react-native-html-parser').DOMParser;
 
@@ -21,30 +23,49 @@ export async function fetchLoginAuthenticityToken() {
 
 //Browser UA, same as every other request the app makes, so Cloudflare treats
 //this like the rest of the session.
+//Cloudflare uses these to turn away automated clients.
+const CLOUDFLARE_STATUSES = [403, 503, 520, 522, 525, 418];
+
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
 
 //AO3 runs Rails with per-form CSRF tokens: a work page carries three different
-//authenticity_token values and each is bound to the session that minted it.
-//That makes the TRANSPORT load bearing. getUrl() switches to the WKWebView for
-//24h once Cloudflare mode trips, and the WebView has its own cookie jar that
-//nothing syncs back, so a token minted there is worthless to the native fetch()
-//that sends the kudo. Both legs therefore go through plain fetch() here.
+//authenticity_token values and each is bound to the session that minted it, so
+//the token and the POST must come from the same session.
+//
+//Which transport satisfies that depends on the platform. On Android React
+//Native's fetch and the WebView share one cookie jar (ForwardingCookieHandler
+//over android.webkit.CookieManager), so a token minted in the WebView is still
+//valid for the POST - and going through getUrl keeps the Cloudflare fallback
+//that a bare fetch would lose. On iOS WKWebView keeps its own store and nothing
+//syncs it back to the jar NSURLSession uses, so a WebView-minted token would be
+//spent in a different session; there the token has to come from the same native
+//transport that sends the kudo.
 async function getWorkPage(workId) {
-  const response = await fetch(
-    `https://archiveofourown.org/works/${workId}?view_adult=true`,
-    {
-      credentials: 'include',
-      headers: {
-        Accept:
-          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'User-Agent': BROWSER_UA,
-      },
+  const url = `https://archiveofourown.org/works/${workId}?view_adult=true`;
+
+  if (Platform.OS === 'android') {
+    return getUrl(url);
+  }
+
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers: {
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+      'User-Agent': BROWSER_UA,
     },
-  );
+  });
 
   if (!response.ok) {
+    //A Cloudflare challenge here means native requests are being blocked, and
+    //the kudo POST is a native request too, so there is nothing to fall back
+    //to - say so plainly instead of reporting a bare status code.
+    if (CLOUDFLARE_STATUSES.includes(response.status)) {
+      throw new Error(
+        `AO3 is blocking requests right now (${response.status}). Try again in a few minutes.`,
+      );
+    }
     throw new Error(
       `Could not load the work page: ${response.status} ${response.statusText}`,
     );
