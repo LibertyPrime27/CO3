@@ -1,5 +1,4 @@
 import ky, { TimeoutError } from 'ky';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchViaWebView } from './WebviewFetcher';
 import { Platform } from 'react-native';
 import {
@@ -16,61 +15,6 @@ import {
 import Toast from 'react-native-toast-message';
 import { navigationRef } from '../app';
 import { handleLogin } from './account/login';
-
-const CF_STORAGE_KEY = 'cf_domains';
-const CF_MODE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
-
-async function getCFMap() {
-  const raw = await AsyncStorage.getItem(CF_STORAGE_KEY);
-  return raw ? JSON.parse(raw) : {};
-}
-
-async function isCFMode(domain) {
-  const map = await getCFMap();
-  if (!map[domain]) return false;
-  if (Date.now() > map[domain]) {
-    delete map[domain];
-    await AsyncStorage.setItem(CF_STORAGE_KEY, JSON.stringify(map));
-    return false;
-  }
-  return true;
-}
-
-async function enableCFMode(domain) {
-  const map = await getCFMap();
-  map[domain] = Date.now() + CF_MODE_DURATION;
-  await AsyncStorage.setItem(CF_STORAGE_KEY, JSON.stringify(map));
-}
-
-const TIMEOUT_STRIKE_KEY = 'cf_timeout_strikes';
-const TIMEOUT_STRIKES_BEFORE_CF = 3;
-const TIMEOUT_STRIKE_WINDOW = 10 * 60 * 1000; // 10 minutes
-
-//Returns true once a host has timed out enough times in a short window that
-//Cloudflare is the likely explanation rather than one slow page.
-async function recordTimeoutStrike(domain) {
-  try {
-    const raw = await AsyncStorage.getItem(TIMEOUT_STRIKE_KEY);
-    const map = raw ? JSON.parse(raw) : {};
-    const now = Date.now();
-    const entry = map[domain];
-    const fresh = entry && now - entry.first < TIMEOUT_STRIKE_WINDOW;
-
-    const count = fresh ? entry.count + 1 : 1;
-    map[domain] = { count, first: fresh ? entry.first : now };
-    await AsyncStorage.setItem(TIMEOUT_STRIKE_KEY, JSON.stringify(map));
-
-    if (count >= TIMEOUT_STRIKES_BEFORE_CF) {
-      delete map[domain];
-      await AsyncStorage.setItem(TIMEOUT_STRIKE_KEY, JSON.stringify(map));
-      return true;
-    }
-    return false;
-  } catch (e) {
-    console.warn('Could not record a timeout strike:', e);
-    return false;
-  }
-}
 
 function isCFChallenge(html) {
   return html.includes('_cf_chl_opt');
@@ -113,8 +57,6 @@ async function checkLoginAge() {
 }
 
 export default async function getUrl(url, noWebview = false) {
-  const { hostname } = new URL(url);
-
   if (noWebview) {
     checkLoginAge().then(async (expired) => {
       try {
@@ -166,17 +108,16 @@ export default async function getUrl(url, noWebview = false) {
     noWebview = true;
   }
 
-  if (!noWebview && await isCFMode(hostname)) {
-    console.log(`using webview to fetch ${url}`);
-    return fetchViaWebView(url);
-  }
-
+  //No Cloudflare "mode" latch any more. It used to route EVERY request through
+  //the WebView for 24h after a single challenge, so one bad moment meant AO3's
+  //Cloudflare page on every screen until it expired - including when a plain
+  //request would have succeeded. The direct fetch is always tried first now and
+  //the WebView is only used for the request that actually got challenged.
   try {
     const html = await ky.get(url).text();
 
     if (isCFChallenge(html)) {
       console.log(`isCfChalenged fiered with ${html}`);
-      await enableCFMode(hostname);
       //No cfWarning. That flag routed the WebView into a modal instead of showing
       //the challenge: the warning appeared, the WebView stayed hidden so Cloudflare
       //was never actually presented or solved, and dismissing it reloaded the same
@@ -189,19 +130,9 @@ export default async function getUrl(url, noWebview = false) {
     return html;
   } catch (err) {
     if (cloudflareErrorCodes.includes(err?.response?.status)) {
-      await enableCFMode(hostname);
       return fetchViaWebView(url);
     }
     if (err instanceof TimeoutError) {
-      //A timeout is not proof of Cloudflare. Bulk chapter downloads are by far
-      //the most timeout-prone thing the app does, and one slow chapter used to
-      //be enough to put every request in the app behind the WebView for 24h -
-      //which silently moved the kudo token onto a different session than the
-      //POST that uses it. Retry through the WebView for this request only, and
-      //make it take a few strikes before it becomes the app-wide mode.
-      if (await recordTimeoutStrike(hostname)) {
-        await enableCFMode(hostname);
-      }
       return fetchViaWebView(url);
     }
     throw err;
