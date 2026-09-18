@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { BROWSER_UA } from '../web/userAgent';
 import {
   ActivityIndicator,
   DeviceEventEmitter,
@@ -55,7 +56,7 @@ const fetchAutocompleteSuggestions = async (type, term) => {
     const url = `${AO3_BASE_URL}/${type}?term=${encodeURIComponent(term)}`;
     const response = await fetch(url, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'User-Agent': BROWSER_UA },
     });
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);

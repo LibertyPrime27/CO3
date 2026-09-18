@@ -1,3 +1,5 @@
+import { BROWSER_UA } from '../userAgent';
+
 // Service for fetching autocomplete suggestions from AO3
 
 const AO3_BASE_URL = 'https://archiveofourown.org/autocomplete';
@@ -20,6 +22,7 @@ export const fetchAutocompleteSuggestions = async (type, term) => {
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
+                'User-Agent': BROWSER_UA,
             },
         });
 

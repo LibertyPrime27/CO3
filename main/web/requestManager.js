@@ -1,4 +1,5 @@
 import ky, { TimeoutError } from 'ky';
+import { BROWSER_HEADERS } from './userAgent';
 import { fetchViaWebView } from './WebviewFetcher';
 import { Platform } from 'react-native';
 import {
@@ -114,7 +115,7 @@ export default async function getUrl(url, noWebview = false) {
   //request would have succeeded. The direct fetch is always tried first now and
   //the WebView is only used for the request that actually got challenged.
   try {
-    const html = await ky.get(url).text();
+    const html = await ky.get(url, { headers: BROWSER_HEADERS }).text();
 
     if (isCFChallenge(html)) {
       console.log(`isCfChalenged fiered with ${html}`);

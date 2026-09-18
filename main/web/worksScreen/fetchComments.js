@@ -1,4 +1,5 @@
 import ky from 'ky';
+import { BROWSER_UA } from '../userAgent';
 
 let DomParser = require('react-native-html-parser').DOMParser;
 
@@ -42,6 +43,7 @@ export async function fetchComments(setCannotNext, setStep, preferHTML, singleCh
     const headers = new Headers({
       "Accept": "*/*;q=0.5, text/javascript, application/javascript, application/ecmascript, application/x-ecmascript",
       "Accept-Language": "en-US,en;q=0.5",
+      "User-Agent": BROWSER_UA,
       "X-Requested-With": "XMLHttpRequest",
       "Sec-GPC": "1",
       "Sec-Fetch-Dest": "empty",
