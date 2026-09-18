@@ -177,7 +177,12 @@ export default async function getUrl(url, noWebview = false) {
     if (isCFChallenge(html)) {
       console.log(`isCfChalenged fiered with ${html}`);
       await enableCFMode(hostname);
-      return fetchViaWebView(url, { cfWarning: true });
+      //No cfWarning. That flag routed the WebView into a modal instead of showing
+      //the challenge: the warning appeared, the WebView stayed hidden so Cloudflare
+      //was never actually presented or solved, and dismissing it reloaded the same
+      //URL straight back into the same challenge. Without it the WebView is shown,
+      //the challenge resolves, and the page loads.
+      return fetchViaWebView(url);
     }
 
     console.log(`fetched ${url} via ky.`);
@@ -185,7 +190,7 @@ export default async function getUrl(url, noWebview = false) {
   } catch (err) {
     if (cloudflareErrorCodes.includes(err?.response?.status)) {
       await enableCFMode(hostname);
-      return fetchViaWebView(url, { cfWarning: true });
+      return fetchViaWebView(url);
     }
     if (err instanceof TimeoutError) {
       //A timeout is not proof of Cloudflare. Bulk chapter downloads are by far
@@ -197,7 +202,7 @@ export default async function getUrl(url, noWebview = false) {
       if (await recordTimeoutStrike(hostname)) {
         await enableCFMode(hostname);
       }
-      return fetchViaWebView(url, { cfWarning: true });
+      return fetchViaWebView(url);
     }
     throw err;
   }
