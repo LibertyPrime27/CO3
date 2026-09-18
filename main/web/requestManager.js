@@ -115,7 +115,16 @@ export default async function getUrl(url, noWebview = false) {
   //request would have succeeded. The direct fetch is always tried first now and
   //the WebView is only used for the request that actually got challenged.
   try {
-    const html = await ky.get(url, { headers: BROWSER_HEADERS }).text();
+    const html = await ky.get(url, {
+      headers: BROWSER_HEADERS,
+      //ky defaults to a 10s timeout, and AO3 on mobile exceeds that routinely.
+      //Every one of those timeouts was caught below and sent to the WebView,
+      //which is how ordinary slowness ended up rendering a Cloudflare page.
+      timeout: 60000,
+      //Default is 2. Combined with the timeout above, a 503 could burn three
+      //full attempts before the caller ever heard back.
+      retry: 1,
+    }).text();
 
     if (isCFChallenge(html)) {
       console.log(`isCfChalenged fiered with ${html}`);
